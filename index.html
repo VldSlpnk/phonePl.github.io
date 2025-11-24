@@ -40,16 +40,31 @@
             height: 100%;
             object-fit: cover;
          }
+         /* Рамка для номера */
          #frame {
             position: absolute;
-            border: 3px solid #00c3ff;
+            border: 3px solid #0066ff;
             border-radius: 8px;
             width: 80%;
             height: 20%;
             top: 40%;
             left: 10%;
-            pointer-events: none;
+            pointer-events: auto; /* чтобы можно было кликать по ручке */
          }
+         /* Ручка для изменения размера (правый нижний угол) */
+         #frame-resize-handle {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            right: -10px;
+            bottom: -10px;
+            border-radius: 50%;
+            border: 2px solid #003a7c;
+            background: rgba(0, 0, 0, 0.7);
+            cursor: nwse-resize;
+            touch-action: none;
+         }
+
          #controls {
             padding: 12px;
             width: 100%;
@@ -74,10 +89,10 @@
             color: #fff;
          }
          #scan-btn {
-            background: #93ff68;
+            background: #ffde22;
          }
          #send-btn {
-            background: #0984e3;
+            background: #00b460;
          }
          button:disabled {
             opacity: 0.6;
@@ -98,19 +113,46 @@
          #phones-list li {
             padding: 4px 0;
             border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+         }
+         #phones-list li span.li-text {
+            flex: 1;
+            min-width: 0;
+         }
+         .li-actions {
+            display: flex;
+            gap: 4px;
+         }
+         .small-btn {
+            padding: 2px 6px;
+            font-size: 12px;
+            border-radius: 6px;
+            border: 1px solid rgba(255, 255, 255, 0.4);
+            background: transparent;
+            color: #fff;
+            flex: 0 0 auto;
+         }
+         .small-btn.danger {
+            border-color: #ff7675;
+            color: #ff7675;
          }
       </style>
    </head>
    <body>
       <div id="video-container">
          <video id="video" autoplay playsinline></video>
-         <div id="frame"></div>
+         <div id="frame">
+            <div id="frame-resize-handle"></div>
+         </div>
       </div>
 
       <div id="controls">
          <div id="controls-top-text">
-            Наводи номер в рамку, сканируй несколько номеров подряд, потом
-            отправляй.
+            Наводи номер в рамку, сканируй несколько номеров подряд,
+            редактируй/удаляй, потом отправляй.
          </div>
 
          <div id="status"></div>
@@ -127,8 +169,10 @@
          const tg = window.Telegram.WebApp;
          tg.expand();
 
+         const videoContainer = document.getElementById("video-container");
          const video = document.getElementById("video");
          const frame = document.getElementById("frame");
+         const frameHandle = document.getElementById("frame-resize-handle");
          const scanBtn = document.getElementById("scan-btn");
          const sendBtn = document.getElementById("send-btn");
          const statusEl = document.getElementById("status");
@@ -136,7 +180,7 @@
 
          let scannedPhones = [];
 
-         // Включаем камеру (задняя камера)
+         // Включаем камеру (задняя)
          navigator.mediaDevices
             .getUserMedia({ video: { facingMode: "environment" } })
             .then((stream) => {
@@ -146,7 +190,72 @@
                alert("Не удалось открыть камеру: " + err);
             });
 
-         // Парсим польский номер и возвращаем в формате "881 724 870"
+         // ========= Ресайз рамки =========
+         let isResizing = false;
+         let startX, startY, startWidth, startHeight;
+
+         function getClientXY(e) {
+            if (e.touches && e.touches[0]) {
+               return { x: e.touches[0].clientX, y: e.touches[0].clientY };
+            }
+            return { x: e.clientX, y: e.clientY };
+         }
+
+         function startResize(e) {
+            e.preventDefault();
+            isResizing = true;
+            const rect = frame.getBoundingClientRect();
+            startWidth = rect.width;
+            startHeight = rect.height;
+
+            const { x, y } = getClientXY(e);
+            startX = x;
+            startY = y;
+         }
+
+         function onResize(e) {
+            if (!isResizing) return;
+            e.preventDefault();
+
+            const { x, y } = getClientXY(e);
+            const dx = x - startX;
+            const dy = y - startY;
+
+            const containerRect = videoContainer.getBoundingClientRect();
+
+            let newWidth = startWidth + dx;
+            let newHeight = startHeight + dy;
+
+            const minWidth = containerRect.width * 0.2;
+            const minHeight = containerRect.height * 0.1;
+            const maxWidth = containerRect.width * 0.95;
+            const maxHeight = containerRect.height * 0.95;
+
+            newWidth = Math.max(minWidth, Math.min(maxWidth, newWidth));
+            newHeight = Math.max(minHeight, Math.min(maxHeight, newHeight));
+
+            frame.style.width = newWidth + "px";
+            frame.style.height = newHeight + "px";
+         }
+
+         function stopResize() {
+            isResizing = false;
+         }
+
+         frameHandle.addEventListener("mousedown", startResize);
+         frameHandle.addEventListener("touchstart", startResize, {
+            passive: false,
+         });
+
+         window.addEventListener("mousemove", onResize);
+         window.addEventListener("touchmove", onResize, { passive: false });
+
+         window.addEventListener("mouseup", stopResize);
+         window.addEventListener("touchend", stopResize);
+
+         // ========= Работа с номерами =========
+
+         // Распознанный текст -> польский номер "881 724 870"
          function extractPhone(text) {
             text = text.replace(/\s+/g, " ");
             console.log("OCR raw text:", text);
@@ -157,6 +266,15 @@
             return `${m[1]} ${m[2]} ${m[3]}`;
          }
 
+         // Нормализация номера, введённого вручную (для редактирования)
+         function normalizeManualPhone(input) {
+            const digits = (input.match(/\d/g) || []).join("");
+            if (digits.length !== 9) return null;
+            return `${digits.slice(0, 3)} ${digits.slice(3, 6)} ${digits.slice(
+               6
+            )}`;
+         }
+
          function renderPhonesList() {
             phonesListEl.innerHTML = "";
             if (!scannedPhones.length) {
@@ -164,9 +282,60 @@
                return;
             }
             statusEl.textContent = `Отсканировано номеров: ${scannedPhones.length}`;
+
             scannedPhones.forEach((p, idx) => {
                const li = document.createElement("li");
-               li.textContent = `${idx + 1}. ${p}`;
+
+               const textSpan = document.createElement("span");
+               textSpan.className = "li-text";
+               textSpan.textContent = `${idx + 1}. ${p}`;
+
+               const actions = document.createElement("span");
+               actions.className = "li-actions";
+
+               const editBtn = document.createElement("button");
+               editBtn.type = "button";
+               editBtn.className = "small-btn";
+               editBtn.textContent = "✏️";
+
+               editBtn.addEventListener("click", () => {
+                  const current = scannedPhones[idx];
+                  const newVal = prompt(
+                     "Измени номер (можно без пробелов):",
+                     current
+                  );
+                  if (!newVal) return;
+
+                  const normalized = normalizeManualPhone(newVal);
+                  if (!normalized) {
+                     alert(
+                        "Не удалось понять номер. Введи 9 цифр, например 881724870 или 881 724 870."
+                     );
+                     return;
+                  }
+                  scannedPhones[idx] = normalized;
+                  statusEl.textContent = `Номер обновлён: ${normalized}`;
+                  renderPhonesList();
+               });
+
+               const delBtn = document.createElement("button");
+               delBtn.type = "button";
+               delBtn.className = "small-btn danger";
+               delBtn.textContent = "🗑️";
+
+               delBtn.addEventListener("click", () => {
+                  const value = scannedPhones[idx];
+                  if (!confirm(`Удалить номер ${value}?`)) return;
+                  scannedPhones.splice(idx, 1);
+                  statusEl.textContent = `Номер удалён: ${value}`;
+                  renderPhonesList();
+               });
+
+               actions.appendChild(editBtn);
+               actions.appendChild(delBtn);
+
+               li.appendChild(textSpan);
+               li.appendChild(actions);
                phonesListEl.appendChild(li);
             });
          }
@@ -215,7 +384,7 @@
                   cropCanvas.height
                );
 
-               // 3. OCR
+               // 3. OCR по вырезанной области
                const result = await Tesseract.recognize(cropCanvas, "eng", {
                   logger: (m) => console.log(m),
                });
@@ -227,7 +396,7 @@
                   statusEl.textContent =
                      "Не нашёл номер. Попробуй поднести ближе/резче.";
                } else {
-                  // Добавляем номер в массив, без дублей
+                  // Добавляем новый номер, дубликаты со скана не добавляем
                   if (!scannedPhones.includes(phone)) {
                      scannedPhones.push(phone);
                      statusEl.textContent = `Добавлен номер: ${phone}`;
@@ -253,7 +422,6 @@
                return;
             }
 
-            // Отправляем массив номеров как JSON-строку
             const payload = JSON.stringify(scannedPhones);
             tg.sendData(payload);
             tg.close();
