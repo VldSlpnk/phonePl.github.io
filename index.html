@@ -1,188 +1,266 @@
 <!DOCTYPE html>
 <html lang="ru">
-<head>
-  <meta charset="UTF-8" />
-  <title>Сканер номера</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+   <head>
+      <meta charset="UTF-8" />
+      <title>Сканер номера</title>
+      <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-  <!-- Telegram WebApp API -->
-  <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <!-- Tesseract.js для OCR -->
-  <script src="https://unpkg.com/tesseract.js@5.0.0/dist/tesseract.min.js"></script>
+      <!-- Telegram WebApp API -->
+      <script src="https://telegram.org/js/telegram-web-app.js"></script>
+      <!-- Tesseract.js для OCR -->
+      <script src="https://unpkg.com/tesseract.js@5.0.0/dist/tesseract.min.js"></script>
 
-  <style>
-    * {
-      box-sizing: border-box;
-    }
-    body {
-      margin: 0;
-      background: #000;
-      color: #fff;
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      height: 100vh;
-    }
-    #video-container {
-      position: relative;
-      width: 100%;
-      max-width: 500px;
-      flex: 1;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      overflow: hidden;
-    }
-    video {
-      width: 100%;
-      height: 100%;
-      object-fit: cover; /* чтобы картинка занимала весь контейнер */
-    }
-    /* Рамка для номера */
-    #frame {
-      position: absolute;
-      border: 3px solid #00ff88;
-      border-radius: 8px;
-      width: 80%;
-      height: 20%;
-      top: 40%;
-      left: 10%;
-      box-sizing: border-box;
-      pointer-events: none;
-    }
-    #controls {
-      padding: 12px;
-      width: 100%;
-      max-width: 500px;
-      text-align: center;
-    }
-    button {
-      width: 100%;
-      padding: 12px;
-      font-size: 16px;
-      border-radius: 8px;
-      border: none;
-      background: #00b894;
-      color: #fff;
-      font-weight: 600;
-    }
-    button:disabled {
-      opacity: 0.6;
-    }
-  </style>
-</head>
-<body>
-  <div id="video-container">
-    <video id="video" autoplay playsinline></video>
-    <div id="frame"></div>
-  </div>
-  <div id="controls">
-    <div style="margin-bottom:8px;">Наведи номер в рамку и нажми кнопку:</div>
-    <button id="scan-btn">Сканировать номер</button>
-  </div>
+      <style>
+         * {
+            box-sizing: border-box;
+         }
+         body {
+            margin: 0;
+            background: #000;
+            color: #fff;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont,
+               "Segoe UI", sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            height: 100vh;
+         }
+         #video-container {
+            position: relative;
+            width: 100%;
+            max-width: 500px;
+            flex: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+         }
+         video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+         }
+         #frame {
+            position: absolute;
+            border: 3px solid #00c3ff;
+            border-radius: 8px;
+            width: 80%;
+            height: 20%;
+            top: 40%;
+            left: 10%;
+            pointer-events: none;
+         }
+         #controls {
+            padding: 12px;
+            width: 100%;
+            max-width: 500px;
+         }
+         #controls-top-text {
+            text-align: center;
+            margin-bottom: 8px;
+         }
+         .btn-row {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 8px;
+         }
+         button {
+            flex: 1;
+            padding: 12px;
+            font-size: 14px;
+            border-radius: 8px;
+            border: none;
+            font-weight: 600;
+            color: #fff;
+         }
+         #scan-btn {
+            background: #93ff68;
+         }
+         #send-btn {
+            background: #0984e3;
+         }
+         button:disabled {
+            opacity: 0.6;
+         }
+         #status {
+            font-size: 13px;
+            min-height: 18px;
+            margin-bottom: 4px;
+         }
+         #phones-list {
+            list-style: none;
+            padding-left: 0;
+            margin: 4px 0 0;
+            font-size: 14px;
+            max-height: 120px;
+            overflow-y: auto;
+         }
+         #phones-list li {
+            padding: 4px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+         }
+      </style>
+   </head>
+   <body>
+      <div id="video-container">
+         <video id="video" autoplay playsinline></video>
+         <div id="frame"></div>
+      </div>
 
-  <script>
-    const tg = window.Telegram.WebApp;
-    tg.expand();  // разворачиваем WebApp
+      <div id="controls">
+         <div id="controls-top-text">
+            Наводи номер в рамку, сканируй несколько номеров подряд, потом
+            отправляй.
+         </div>
 
-    const video = document.getElementById('video');
-    const frame = document.getElementById('frame');
-    const scanBtn = document.getElementById('scan-btn');
+         <div id="status"></div>
 
-    // Включаем камеру (задняя камера на телефоне)
-    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
-      .then(stream => {
-        video.srcObject = stream;
-      })
-      .catch(err => {
-        alert("Не удалось открыть камеру: " + err);
-      });
+         <div class="btn-row">
+            <button id="scan-btn">Сканировать номер</button>
+            <button id="send-btn">Отправить</button>
+         </div>
 
-    // Функция извлечения польского номера в формате "881 724 870"
-    function extractPhone(text) {
-      // все пробелы/переводы строк приводим к одному пробелу
-      text = text.replace(/\s+/g, ' ');
-      console.log("OCR raw text:", text);
+         <ul id="phones-list"></ul>
+      </div>
 
-      // 3+3+3 цифры, с возможным +48 и разделителями
-      const re = /(?:\+48\s*)?(\d{3})\D?(\d{3})\D?(\d{3})/;
-      const m = text.match(re);
-      if (!m) return null;
+      <script>
+         const tg = window.Telegram.WebApp;
+         tg.expand();
 
-      // возвращаем строго "XXX XXX XXX"
-      return `${m[1]} ${m[2]} ${m[3]}`;
-    }
+         const video = document.getElementById("video");
+         const frame = document.getElementById("frame");
+         const scanBtn = document.getElementById("scan-btn");
+         const sendBtn = document.getElementById("send-btn");
+         const statusEl = document.getElementById("status");
+         const phonesListEl = document.getElementById("phones-list");
 
-    scanBtn.addEventListener('click', async () => {
-      // Проверяем, что видео уже прогрузилось
-      if (!video.videoWidth || !video.videoHeight) {
-        alert("Камера ещё не готова, попробуй через секунду.");
-        return;
-      }
+         let scannedPhones = [];
 
-      // 1. Берём кадр с видео на полный канвас
-      const canvas = document.createElement('canvas');
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+         // Включаем камеру (задняя камера)
+         navigator.mediaDevices
+            .getUserMedia({ video: { facingMode: "environment" } })
+            .then((stream) => {
+               video.srcObject = stream;
+            })
+            .catch((err) => {
+               alert("Не удалось открыть камеру: " + err);
+            });
 
-      // 2. Вычисляем координаты рамки относительно видео на экране
-      const frameRect = frame.getBoundingClientRect();
-      const videoRect = video.getBoundingClientRect();
+         // Парсим польский номер и возвращаем в формате "881 724 870"
+         function extractPhone(text) {
+            text = text.replace(/\s+/g, " ");
+            console.log("OCR raw text:", text);
 
-      // Доли (проценты) рамки от размеров видео
-      const relX = (frameRect.left - videoRect.left) / videoRect.width;
-      const relY = (frameRect.top - videoRect.top) / videoRect.height;
-      const relW = frameRect.width / videoRect.width;
-      const relH = frameRect.height / videoRect.height;
+            const re = /(?:\+48\s*)?(\d{3})\D?(\d{3})\D?(\d{3})/;
+            const m = text.match(re);
+            if (!m) return null;
+            return `${m[1]} ${m[2]} ${m[3]}`;
+         }
 
-      // 3. Создаём канвас только под область рамки
-      const cropCanvas = document.createElement('canvas');
-      cropCanvas.width = canvas.width * relW;
-      cropCanvas.height = canvas.height * relH;
-      const cropCtx = cropCanvas.getContext('2d');
+         function renderPhonesList() {
+            phonesListEl.innerHTML = "";
+            if (!scannedPhones.length) {
+               statusEl.textContent = "Номера ещё не отсканированы.";
+               return;
+            }
+            statusEl.textContent = `Отсканировано номеров: ${scannedPhones.length}`;
+            scannedPhones.forEach((p, idx) => {
+               const li = document.createElement("li");
+               li.textContent = `${idx + 1}. ${p}`;
+               phonesListEl.appendChild(li);
+            });
+         }
 
-      cropCtx.drawImage(
-        canvas,
-        canvas.width * relX,      // x исходной области
-        canvas.height * relY,     // y исходной области
-        canvas.width * relW,      // ширина исходной области
-        canvas.height * relH,     // высота исходной области
-        0,                        // x на целевом канвасе
-        0,                        // y на целевом канвасе
-        cropCanvas.width,
-        cropCanvas.height
-      );
+         scanBtn.addEventListener("click", async () => {
+            if (!video.videoWidth || !video.videoHeight) {
+               alert("Камера ещё не готова, попробуй через секунду.");
+               return;
+            }
 
-      scanBtn.disabled = true;
-      scanBtn.textContent = "Распознаю...";
+            scanBtn.disabled = true;
+            sendBtn.disabled = true;
+            statusEl.textContent = "Сканирую и распознаю...";
 
-      try {
-        // 4. OCR по вырезанной области
-        const result = await Tesseract.recognize(cropCanvas, 'eng', {
-          logger: m => console.log(m)
-        });
+            try {
+               // 1. Кадр целиком
+               const canvas = document.createElement("canvas");
+               canvas.width = video.videoWidth;
+               canvas.height = video.videoHeight;
+               const ctx = canvas.getContext("2d");
+               ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-        const text = result.data.text || "";
-        const phone = extractPhone(text);
+               // 2. Кроп по рамке
+               const frameRect = frame.getBoundingClientRect();
+               const videoRect = video.getBoundingClientRect();
 
-        if (!phone) {
-          alert("Не смог найти номер. Попробуй поднести ближе и сделать резче.");
-        } else {
-          // Отправляем строку вида "881 724 870" в бота
-          tg.sendData(phone);
-          tg.close();
-        }
-      } catch (e) {
-        console.error(e);
-        alert("Ошибка распознавания: " + e);
-      } finally {
-        scanBtn.disabled = false;
-        scanBtn.textContent = "Сканировать номер";
-      }
-    });
-  </script>
-</body>
+               const relX = (frameRect.left - videoRect.left) / videoRect.width;
+               const relY = (frameRect.top - videoRect.top) / videoRect.height;
+               const relW = frameRect.width / videoRect.width;
+               const relH = frameRect.height / videoRect.height;
+
+               const cropCanvas = document.createElement("canvas");
+               cropCanvas.width = canvas.width * relW;
+               cropCanvas.height = canvas.height * relH;
+               const cropCtx = cropCanvas.getContext("2d");
+
+               cropCtx.drawImage(
+                  canvas,
+                  canvas.width * relX,
+                  canvas.height * relY,
+                  canvas.width * relW,
+                  canvas.height * relH,
+                  0,
+                  0,
+                  cropCanvas.width,
+                  cropCanvas.height
+               );
+
+               // 3. OCR
+               const result = await Tesseract.recognize(cropCanvas, "eng", {
+                  logger: (m) => console.log(m),
+               });
+
+               const text = result.data.text || "";
+               const phone = extractPhone(text);
+
+               if (!phone) {
+                  statusEl.textContent =
+                     "Не нашёл номер. Попробуй поднести ближе/резче.";
+               } else {
+                  // Добавляем номер в массив, без дублей
+                  if (!scannedPhones.includes(phone)) {
+                     scannedPhones.push(phone);
+                     statusEl.textContent = `Добавлен номер: ${phone}`;
+                  } else {
+                     statusEl.textContent = `Номер уже есть в списке: ${phone}`;
+                  }
+                  renderPhonesList();
+               }
+            } catch (e) {
+               console.error(e);
+               alert("Ошибка распознавания: " + e);
+            } finally {
+               scanBtn.disabled = false;
+               sendBtn.disabled = false;
+            }
+         });
+
+         sendBtn.addEventListener("click", () => {
+            if (!scannedPhones.length) {
+               alert(
+                  "Нет ни одного номера для отправки. Сначала отсканируй хотя бы один."
+               );
+               return;
+            }
+
+            // Отправляем массив номеров как JSON-строку
+            const payload = JSON.stringify(scannedPhones);
+            tg.sendData(payload);
+            tg.close();
+         });
+
+         // Первичный рендер
+         renderPhonesList();
+      </script>
+   </body>
 </html>
