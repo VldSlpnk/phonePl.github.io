@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="ru">
+   <head>
+      <meta charset="UTF-8" />
+      <title>Сканер номера</title>
+      <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+      <!-- Telegram WebApp API -->
+      <script src="https://telegram.org/js/telegram-web-app.js"></script>
+      <!-- Tesseract.js для OCR -->
+      <script src="https://unpkg.com/tesseract.js@5.0.0/dist/tesseract.min.js"></script>
+
+      <style>
+         body {
+            margin: 0;
+            background: #000;
+            color: #fff;
+            font-family: system-ui, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            height: 100vh;
+         }
+         #video-container {
+            position: relative;
+            width: 100%;
+            max-width: 500px;
+            flex: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+         }
+         video {
+            width: 100%;
+         }
+         /* Рамка для номера */
+         #frame {
+            position: absolute;
+            border: 3px solid #00ff88;
+            border-radius: 8px;
+            width: 80%;
+            height: 20%;
+            top: 40%;
+            left: 10%;
+            box-sizing: border-box;
+         }
+         #controls {
+            padding: 12px;
+            width: 100%;
+            max-width: 500px;
+            text-align: center;
+         }
+         button {
+            width: 100%;
+            padding: 12px;
+            font-size: 16px;
+            border-radius: 8px;
+            border: none;
+            background: #00b894;
+            color: #fff;
+         }
+      </style>
+   </head>
+   <body>
+      <div id="video-container">
+         <video id="video" autoplay playsinline></video>
+         <div id="frame"></div>
+      </div>
+      <div id="controls">
+         <div style="margin-bottom: 8px">
+            Наведи номер в рамку и нажми кнопку:
+         </div>
+         <button id="scan-btn">Сканировать номер</button>
+      </div>
+
+      <script>
+         const tg = window.Telegram.WebApp;
+         tg.expand(); // разворачиваем на весь экран
+
+         const video = document.getElementById("video");
+         const scanBtn = document.getElementById("scan-btn");
+
+         // 1. Включаем камеру
+         navigator.mediaDevices
+            .getUserMedia({ video: { facingMode: "environment" } })
+            .then((stream) => {
+               video.srcObject = stream;
+            })
+            .catch((err) => {
+               alert("Не удалось открыть камеру: " + err);
+            });
+
+         function extractPhone(text) {
+            text = text.replace(/\n/g, " ");
+            const re = /(?:\+48\s*)?(\d{3}\s?\d{3}\s?\d{3})/;
+            const m = text.match(re);
+            if (!m) return null;
+            const digits = m[1].replace(/\s/g, "");
+            return (
+               "+48 " +
+               digits.slice(0, 3) +
+               " " +
+               digits.slice(3, 6) +
+               " " +
+               digits.slice(6)
+            );
+         }
+
+         scanBtn.addEventListener("click", async () => {
+            // 2. Берём кадр с видео в canvas
+            const canvas = document.createElement("canvas");
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            const ctx = canvas.getContext("2d");
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            // (На первом шаге берём весь кадр; кроп по рамке можно добавить позже.)
+
+            scanBtn.disabled = true;
+            scanBtn.textContent = "Распознаю...";
+
+            try {
+               const result = await Tesseract.recognize(canvas, "eng", {
+                  logger: (m) => console.log(m),
+               });
+               const text = result.data.text;
+               console.log("OCR text:", text);
+               const phone = extractPhone(text);
+               if (!phone) {
+                  alert("Не нашёл номер, попробуй ещё раз ближе/резче.");
+               } else {
+                  // 3. Отправляем номер обратно в Телеграм
+                  tg.sendData(phone);
+                  tg.close(); // закроет WebApp
+               }
+            } catch (e) {
+               console.error(e);
+               alert("Ошибка распознавания: " + e);
+            } finally {
+               scanBtn.disabled = false;
+               scanBtn.textContent = "Сканировать номер";
+            }
+         });
+      </script>
+   </body>
+</html>
