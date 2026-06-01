@@ -369,7 +369,7 @@
          </div>
       </div>
 
-      <div id="status-chip">Нажми 📷, чтобы включить камеру</div>
+      <div id="status-chip">Подготавливаю распознавание...</div>
 
       <button id="camera-btn" type="button">📷</button>
 
@@ -433,6 +433,7 @@
 
          let worker = null;
          let workerReady = false;
+         let workerPromise = null;
 
          let frameInitialized = false;
 
@@ -464,7 +465,6 @@
 
          function renderPhonesList() {
             phonesListEl.innerHTML = "";
-
             sendBtn.disabled = scannedPhones.length === 0;
 
             if (!scannedPhones.length) {
@@ -504,7 +504,6 @@
 
                actions.appendChild(editBtn);
                actions.appendChild(deleteBtn);
-
                li.appendChild(text);
                li.appendChild(actions);
                phonesListEl.appendChild(li);
@@ -601,9 +600,8 @@
             if (frameInitialized && !force) return;
 
             const rect = videoContainer.getBoundingClientRect();
-
             const width = rect.width * 0.84;
-            const height = rect.height * 0.18;
+            const height = rect.height * 0.12;
 
             frame.style.width = `${width}px`;
             frame.style.height = `${height}px`;
@@ -705,17 +703,32 @@
 
          async function ensureWorker() {
             if (workerReady && worker) return worker;
+            if (workerPromise) return workerPromise;
 
             setStatus("Подготавливаю распознавание...");
 
-            worker = await Tesseract.createWorker("eng");
+            workerPromise = (async () => {
+               const createdWorker = await Tesseract.createWorker("eng");
 
-            await worker.setParameters({
-               tessedit_char_whitelist: "0123456789 +-.()",
-            });
+               await createdWorker.setParameters({
+                  tessedit_char_whitelist: "0123456789 +-.()",
+               });
 
-            workerReady = true;
-            return worker;
+               worker = createdWorker;
+               workerReady = true;
+
+               return worker;
+            })();
+
+            try {
+               return await workerPromise;
+            } catch (error) {
+               console.error("OCR init error:", error);
+               workerPromise = null;
+               worker = null;
+               workerReady = false;
+               throw error;
+            }
          }
 
          function extractPhonesFromText(text) {
@@ -874,7 +887,7 @@
             }
 
             runOCROnce();
-            scanTimer = setInterval(runOCROnce, 1700);
+            scanTimer = setInterval(runOCROnce, 1300);
          }
 
          function pauseAutoScan() {
@@ -959,6 +972,20 @@
          });
 
          renderPhonesList();
+
+         setTimeout(() => {
+            ensureWorker()
+               .then(() => {
+                  if (!stream && !autoScanEnabled) {
+                     setStatus("OCR готов. Нажми 📷, чтобы включить камеру");
+                  }
+               })
+               .catch(() => {
+                  if (!stream && !autoScanEnabled) {
+                     setStatus("OCR загрузится при первом скане. Нажми 📷");
+                  }
+               });
+         }, 400);
       </script>
    </body>
 </html>
