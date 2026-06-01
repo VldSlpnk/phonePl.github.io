@@ -1,553 +1,780 @@
 <!DOCTYPE html>
 <html lang="ru">
-   <head>
-      <meta charset="UTF-8" />
-      <title>Сканер номера</title>
-      <meta name="viewport" content="width=device-width, initial-scale=1" />
+<head>
+  <meta charset="UTF-8" />
+  <title>Сканер номеров</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 
-      <!-- Telegram WebApp API -->
-      <script src="https://telegram.org/js/telegram-web-app.js"></script>
-      <!-- Tesseract.js для OCR -->
-      <script src="https://unpkg.com/tesseract.js@5.0.0/dist/tesseract.min.js"></script>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="https://unpkg.com/tesseract.js@5.0.0/dist/tesseract.min.js"></script>
 
-      <style>
-         * {
-            box-sizing: border-box;
-         }
-         body {
-            margin: 0;
-            background: #000;
-            color: #fff;
-            font-family: system-ui, -apple-system, BlinkMacSystemFont,
-               "Segoe UI", sans-serif;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            height: 100vh;
-         }
-         #video-container {
-            position: relative;
-            width: 100%;
-            max-width: 500px;
-            flex: 1;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            overflow: hidden;
-         }
-         video {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-         }
-         /* Рамка для номера (позиция и размер задаются JS, центрируем программно) */
-         #frame {
-            position: absolute;
-            border: 3px solid #5a6aff;
-            border-radius: 8px;
-            pointer-events: auto;
-         }
-         /* Ручка для изменения размера (правый нижний угол) */
-         #frame-resize-handle {
-            position: absolute;
-            width: 20px;
-            height: 20px;
-            right: -10px;
-            bottom: -10px;
-            border-radius: 50%;
-            border: 2px solid #cc00ff;
-            background: rgba(0, 0, 0, 0.7);
-            cursor: nwse-resize;
-            touch-action: none;
-         }
+  <style>
+    :root {
+      --bg: #0b0f19;
+      --panel: #111827;
+      --panel-2: #172033;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --line: rgba(255,255,255,.12);
+      --primary: #38bdf8;
+      --primary-2: #0284c7;
+      --good: #22c55e;
+      --warn: #f59e0b;
+      --danger: #fb7185;
+      --shadow: 0 14px 40px rgba(0,0,0,.35);
+    }
 
-         #controls {
-            padding: 12px;
-            width: 100%;
-            max-width: 500px;
-         }
-         #controls-top-text {
-            text-align: center;
-            margin-bottom: 8px;
-         }
-         .btn-row {
-            display: flex;
-            gap: 8px;
-            margin-bottom: 8px;
-         }
-         button {
-            flex: 1;
-            padding: 12px;
-            font-size: 14px;
-            border-radius: 8px;
-            border: none;
-            font-weight: 600;
-            color: #fff;
-         }
-         #scan-btn {
-            background: #ffe762;
-         }
-         #send-btn {
-            background: #006fc4;
-         }
-         button:disabled {
-            opacity: 0.6;
-         }
-         #status {
-            font-size: 13px;
-            min-height: 18px;
-            margin-bottom: 4px;
-         }
-         #phones-list {
-            list-style: none;
-            padding-left: 0;
-            margin: 4px 0 0;
-            font-size: 14px;
-            max-height: 120px;
-            overflow-y: auto;
-         }
-         #phones-list li {
-            padding: 4px 0;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            gap: 8px;
-         }
-         #phones-list li span.li-text {
-            flex: 1;
-            min-width: 0;
-         }
-         .li-actions {
-            display: flex;
-            gap: 4px;
-         }
-         .small-btn {
-            padding: 2px 6px;
-            font-size: 12px;
-            border-radius: 6px;
-            border: 1px solid rgba(255, 255, 255, 0.4);
-            background: transparent;
-            color: #fff;
-            flex: 0 0 auto;
-         }
-         .small-btn.danger {
-            border-color: #ff7675;
-            color: #ff7675;
-         }
+    * { box-sizing: border-box; }
 
-         /* Панель редактирования номера внизу */
-         #edit-panel {
-            position: fixed;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            z-index: 100;
-            background: rgba(0, 0, 0, 0.95);
-            padding: 8px 12px 12px;
-            border-top: 1px solid rgba(255, 255, 255, 0.2);
-            display: none;
-         }
-         #edit-panel.visible {
-            display: block;
-         }
-         #edit-panel-title {
-            font-size: 13px;
-            margin-bottom: 4px;
-         }
-         #edit-input {
-            width: 100%;
-            padding: 6px 8px;
-            border-radius: 6px;
-            border: 1px solid rgba(255, 255, 255, 0.4);
-            background: #111;
-            color: #fff;
-            font-size: 14px;
-            margin-bottom: 6px;
-         }
-         #edit-buttons {
-            display: flex;
-            gap: 8px;
-         }
-         #edit-save-btn,
-         #edit-cancel-btn {
-            flex: 1;
-            padding: 8px;
-            font-size: 13px;
-            border-radius: 6px;
-            border: none;
-            font-weight: 600;
-            color: #fff;
-         }
-         #edit-save-btn {
-            background: #00b894;
-         }
-         #edit-cancel-btn {
-            background: #636e72;
-         }
-      </style>
-   </head>
-   <body>
-      <div id="video-container">
-         <video id="video" autoplay playsinline></video>
-         <div id="frame">
-            <div id="frame-resize-handle"></div>
-         </div>
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .app {
+      width: 100%;
+      max-width: 540px;
+      margin: 0 auto;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      background: var(--bg);
+    }
+
+    .camera-wrap {
+      position: relative;
+      min-height: 42vh;
+      background: #020617;
+      overflow: hidden;
+      border-bottom-left-radius: 24px;
+      border-bottom-right-radius: 24px;
+      box-shadow: var(--shadow);
+    }
+
+    video {
+      width: 100%;
+      height: 100%;
+      min-height: 42vh;
+      object-fit: cover;
+      display: block;
+      background: #020617;
+    }
+
+    .camera-placeholder {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+      padding: 24px;
+      background: radial-gradient(circle at top, #1e293b 0%, #020617 70%);
+    }
+
+    .camera-placeholder.hidden { display: none; }
+
+    .camera-placeholder .icon {
+      font-size: 44px;
+      margin-bottom: 12px;
+    }
+
+    .camera-placeholder .title {
+      font-size: 20px;
+      font-weight: 800;
+      margin-bottom: 6px;
+    }
+
+    .camera-placeholder .hint {
+      max-width: 330px;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.35;
+    }
+
+    .scan-band {
+      position: absolute;
+      left: 5%;
+      right: 5%;
+      top: 34%;
+      height: 34%;
+      border: 2px solid rgba(56, 189, 248, .75);
+      border-radius: 18px;
+      box-shadow: 0 0 0 999px rgba(0,0,0,.12);
+      pointer-events: none;
+      display: none;
+    }
+
+    .scan-band.active { display: block; }
+
+    .status-chip {
+      position: absolute;
+      left: 12px;
+      top: calc(12px + env(safe-area-inset-top));
+      max-width: calc(100% - 92px);
+      padding: 9px 12px;
+      border-radius: 999px;
+      background: rgba(2, 6, 23, .72);
+      backdrop-filter: blur(10px);
+      border: 1px solid var(--line);
+      color: var(--text);
+      font-size: 13px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .floating-camera-btn {
+      position: absolute;
+      right: 14px;
+      bottom: 14px;
+      width: 64px;
+      height: 64px;
+      border: 0;
+      border-radius: 22px;
+      background: linear-gradient(135deg, var(--primary), var(--primary-2));
+      color: white;
+      font-size: 25px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: var(--shadow);
+      cursor: pointer;
+      flex: initial;
+      padding: 0;
+    }
+
+    .content {
+      flex: 1;
+      overflow: auto;
+      padding: 16px 14px calc(14px + env(safe-area-inset-bottom));
+    }
+
+    .top-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .title-block h1 {
+      margin: 0;
+      font-size: 20px;
+      line-height: 1.1;
+    }
+
+    .counter {
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .pill {
+      flex: 0 0 auto;
+      border-radius: 999px;
+      padding: 8px 10px;
+      font-size: 12px;
+      color: #dbeafe;
+      background: rgba(56, 189, 248, .12);
+      border: 1px solid rgba(56, 189, 248, .25);
+    }
+
+    .numbers {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .empty {
+      border: 1px dashed rgba(148, 163, 184, .4);
+      border-radius: 18px;
+      padding: 18px;
+      text-align: center;
+      color: var(--muted);
+      background: rgba(255,255,255,.03);
+    }
+
+    .phone-card {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 11px;
+      border-radius: 18px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+    }
+
+    .phone-index {
+      width: 28px;
+      height: 28px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(56, 189, 248, .12);
+      color: #bae6fd;
+      font-weight: 700;
+      font-size: 13px;
+      flex: 0 0 auto;
+    }
+
+    .phone-number {
+      flex: 1;
+      font-size: 22px;
+      letter-spacing: .8px;
+      font-weight: 750;
+      white-space: nowrap;
+    }
+
+    .icon-btn {
+      width: 40px;
+      height: 40px;
+      border-radius: 14px;
+      border: 1px solid var(--line);
+      background: var(--panel-2);
+      color: var(--text);
+      font-size: 16px;
+      padding: 0;
+      flex: 0 0 auto;
+      cursor: pointer;
+    }
+
+    .icon-btn.danger { color: var(--danger); }
+
+    .actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 9px;
+      margin-top: 8px;
+    }
+
+    .actions .send { grid-column: 1 / -1; }
+
+    button {
+      border: 0;
+      border-radius: 16px;
+      padding: 13px 12px;
+      font-weight: 800;
+      font-size: 15px;
+      color: var(--text);
+      background: var(--panel-2);
+      cursor: pointer;
+    }
+
+    button:disabled {
+      opacity: .45;
+      cursor: not-allowed;
+    }
+
+    .primary {
+      background: linear-gradient(135deg, var(--primary), var(--primary-2));
+    }
+
+    .secondary {
+      background: var(--panel-2);
+      border: 1px solid var(--line);
+    }
+
+    .danger-btn {
+      color: #fecdd3;
+      background: rgba(251, 113, 133, .12);
+      border: 1px solid rgba(251, 113, 133, .24);
+    }
+
+    .sheet {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 40;
+      display: none;
+      background: rgba(2, 6, 23, .94);
+      border-top: 1px solid var(--line);
+      backdrop-filter: blur(14px);
+      padding: 14px 14px calc(14px + env(safe-area-inset-bottom));
+      box-shadow: 0 -16px 50px rgba(0,0,0,.45);
+    }
+
+    .sheet.visible { display: block; }
+
+    .sheet-inner {
+      width: 100%;
+      max-width: 540px;
+      margin: 0 auto;
+    }
+
+    .sheet-title {
+      font-size: 15px;
+      font-weight: 800;
+      margin-bottom: 9px;
+    }
+
+    .phone-input {
+      width: 100%;
+      border: 1px solid var(--line);
+      background: var(--panel);
+      color: var(--text);
+      border-radius: 16px;
+      padding: 14px;
+      font-size: 22px;
+      letter-spacing: 1px;
+      outline: none;
+      margin-bottom: 10px;
+    }
+
+    .sheet-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 9px;
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <section class="camera-wrap" id="cameraWrap">
+      <video id="video" autoplay playsinline muted></video>
+
+      <div class="camera-placeholder" id="cameraPlaceholder">
+        <div class="icon">📷</div>
+        <div class="title">Камера выключена</div>
+        <div class="hint">Нажми кнопку камеры справа снизу. После разрешения доступ к камере не будет запрашиваться каждый раз, пока браузер/Telegram помнит разрешение.</div>
       </div>
 
-      <div id="controls">
-         <div id="controls-top-text">
-            Наводи номер в рамку (по центру), сканируй несколько номеров подряд,
-            редактируй/удаляй, потом отправляй.
-         </div>
+      <div class="scan-band" id="scanBand"></div>
+      <div class="status-chip" id="status">Готово к запуску</div>
+      <button class="floating-camera-btn" id="cameraBtn" type="button">📷</button>
+    </section>
 
-         <div id="status"></div>
-
-         <div class="btn-row">
-            <button id="scan-btn">Сканировать номер</button>
-            <button id="send-btn">Отправить</button>
-         </div>
-
-         <ul id="phones-list"></ul>
+    <section class="content">
+      <div class="top-row">
+        <div class="title-block">
+          <h1>Отсканированные номера</h1>
+          <div class="counter" id="counter">0 номеров</div>
+        </div>
+        <div class="pill" id="modePill">ожидание</div>
       </div>
 
-      <!-- Панель редактирования номера -->
-      <div id="edit-panel">
-         <div id="edit-panel-title">
-            Редактировать номер (9 цифр, можно без пробелов):
-         </div>
-         <input id="edit-input" type="text" inputmode="numeric" />
-         <div id="edit-buttons">
-            <button id="edit-save-btn">Сохранить</button>
-            <button id="edit-cancel-btn">Отмена</button>
-         </div>
+      <div class="numbers" id="numbersList"></div>
+
+      <div class="actions">
+        <button class="secondary" id="manualBtn" type="button">+ Добавить</button>
+        <button class="danger-btn" id="clearBtn" type="button">Очистить</button>
+        <button class="primary send" id="sendBtn" type="button" disabled>Отправить в чат</button>
       </div>
+    </section>
+  </main>
 
-      <script>
-         const tg = window.Telegram.WebApp;
-         tg.expand();
+  <div class="sheet" id="editSheet">
+    <div class="sheet-inner">
+      <div class="sheet-title" id="sheetTitle">Добавить номер</div>
+      <input class="phone-input" id="phoneInput" type="text" inputmode="numeric" autocomplete="off" placeholder="731 399 865" />
+      <div class="sheet-actions">
+        <button class="secondary" id="cancelEditBtn" type="button">Отмена</button>
+        <button class="primary" id="saveEditBtn" type="button">Сохранить</button>
+      </div>
+    </div>
+  </div>
 
-         const videoContainer = document.getElementById("video-container");
-         const video = document.getElementById("video");
-         const frame = document.getElementById("frame");
-         const frameHandle = document.getElementById("frame-resize-handle");
-         const scanBtn = document.getElementById("scan-btn");
-         const sendBtn = document.getElementById("send-btn");
-         const statusEl = document.getElementById("status");
-         const phonesListEl = document.getElementById("phones-list");
+  <script>
+    const tg = window.Telegram?.WebApp;
+    if (tg) {
+      tg.expand();
+      tg.ready();
+    }
 
-         const editPanel = document.getElementById("edit-panel");
-         const editInput = document.getElementById("edit-input");
-         const editSaveBtn = document.getElementById("edit-save-btn");
-         const editCancelBtn = document.getElementById("edit-cancel-btn");
+    const video = document.getElementById("video");
+    const cameraPlaceholder = document.getElementById("cameraPlaceholder");
+    const scanBand = document.getElementById("scanBand");
+    const statusEl = document.getElementById("status");
+    const cameraBtn = document.getElementById("cameraBtn");
+    const modePill = document.getElementById("modePill");
+    const counterEl = document.getElementById("counter");
+    const numbersList = document.getElementById("numbersList");
+    const manualBtn = document.getElementById("manualBtn");
+    const clearBtn = document.getElementById("clearBtn");
+    const sendBtn = document.getElementById("sendBtn");
+    const editSheet = document.getElementById("editSheet");
+    const sheetTitle = document.getElementById("sheetTitle");
+    const phoneInput = document.getElementById("phoneInput");
+    const cancelEditBtn = document.getElementById("cancelEditBtn");
+    const saveEditBtn = document.getElementById("saveEditBtn");
 
-         let scannedPhones = [];
-         let editingIndex = null;
+    const SCAN_INTERVAL_MS = 1400;
 
-         function setStatus(msg) {
-            statusEl.textContent = msg || "";
-         }
+    let stream = null;
+    let scanTimer = null;
+    let isRecognizing = false;
+    let phones = [];
+    let editIndex = null;
 
-         // Включаем камеру (задняя)
-         navigator.mediaDevices
-            .getUserMedia({ video: { facingMode: "environment" } })
-            .then((stream) => {
-               video.srcObject = stream;
-            })
-            .catch((err) => {
-               console.error(err);
-               setStatus(
-                  "Не удалось открыть камеру. Разреши доступ к камере в настройках."
-               );
-               if (tg && tg.showAlert) {
-                  tg.showAlert(
-                     "Не удалось открыть камеру. Проверь доступ к камере."
-                  );
-               }
-            });
+    function setStatus(text) {
+      statusEl.textContent = text || "";
+    }
 
-         // === Инициализация рамки по центру ===
-         function initFrame() {
-            const containerRect = videoContainer.getBoundingClientRect();
-            const initWidth = containerRect.width * 0.8; // 80% ширины
-            const initHeight = containerRect.height * 0.2; // 20% высоты
+    function digitsOnly(value) {
+      return String(value || "").replace(/\D/g, "");
+    }
 
-            frame.style.width = initWidth + "px";
-            frame.style.height = initHeight + "px";
-            frame.style.left = (containerRect.width - initWidth) / 2 + "px";
-            frame.style.top = (containerRect.height - initHeight) / 2 + "px";
-         }
+    function normalizePhone(value) {
+      let digits = digitsOnly(value);
+      if (digits.startsWith("48") && digits.length === 11) {
+        digits = digits.slice(2);
+      }
+      return digits.length === 9 ? digits : null;
+    }
 
-         // Вызываем после загрузки layout
-         window.addEventListener("load", initFrame);
+    function formatPhone(digits) {
+      const d = normalizePhone(digits) || digitsOnly(digits);
+      if (d.length !== 9) return d;
+      return `${d.slice(0, 3)} ${d.slice(3, 6)} ${d.slice(6)}`;
+    }
 
-         // ========= Ресайз рамки ОТ ЦЕНТРА =========
-         let isResizing = false;
-         let startX, startY, startWidth, startHeight;
-         let centerX, centerY; // центр рамки (в координатах контейнера)
+    function vibrate(ms = 35) {
+      try {
+        if (navigator.vibrate) navigator.vibrate(ms);
+      } catch (_) {}
+    }
 
-         function getClientXY(e) {
-            if (e.touches && e.touches[0]) {
-               return { x: e.touches[0].clientX, y: e.touches[0].clientY };
-            }
-            return { x: e.clientX, y: e.clientY };
-         }
+    function addPhone(value, source = "manual") {
+      const phone = normalizePhone(value);
+      if (!phone) {
+        setStatus("Нужен номер ровно из 9 цифр");
+        return false;
+      }
 
-         function startResize(e) {
-            e.preventDefault();
-            isResizing = true;
+      if (phones.includes(phone)) {
+        setStatus(`Уже есть: ${formatPhone(phone)}`);
+        return false;
+      }
 
-            const rect = frame.getBoundingClientRect();
-            const containerRect = videoContainer.getBoundingClientRect();
+      phones.push(phone);
+      setStatus(`Добавлен: ${formatPhone(phone)}`);
+      if (source === "scan") vibrate();
+      renderPhones();
+      return true;
+    }
 
-            startWidth = rect.width;
-            startHeight = rect.height;
+    function renderPhones() {
+      numbersList.innerHTML = "";
+      counterEl.textContent = `${phones.length} ${plural(phones.length, "номер", "номера", "номеров")}`;
+      sendBtn.disabled = phones.length === 0;
+      clearBtn.disabled = phones.length === 0;
 
-            // Центр рамки относительно контейнера
-            centerX = rect.left - containerRect.left + rect.width / 2;
-            centerY = rect.top - containerRect.top + rect.height / 2;
+      if (phones.length === 0) {
+        const empty = document.createElement("div");
+        empty.className = "empty";
+        empty.textContent = "Номера появятся здесь. Их можно удалить, изменить или добавить вручную.";
+        numbersList.appendChild(empty);
+        return;
+      }
 
-            const { x, y } = getClientXY(e);
-            startX = x;
-            startY = y;
-         }
+      phones.forEach((phone, index) => {
+        const card = document.createElement("div");
+        card.className = "phone-card";
 
-         function onResize(e) {
-            if (!isResizing) return;
-            e.preventDefault();
+        const idx = document.createElement("div");
+        idx.className = "phone-index";
+        idx.textContent = String(index + 1);
 
-            const { x, y } = getClientXY(e);
-            const dx = x - startX;
-            const dy = y - startY;
+        const number = document.createElement("div");
+        number.className = "phone-number";
+        number.textContent = formatPhone(phone);
 
-            const containerRect = videoContainer.getBoundingClientRect();
+        const editBtn = document.createElement("button");
+        editBtn.className = "icon-btn";
+        editBtn.type = "button";
+        editBtn.textContent = "✏️";
+        editBtn.addEventListener("click", () => openSheet(index));
 
-            // Увеличиваем/уменьшаем размер, центр остаётся на месте
-            let newWidth = startWidth + dx;
-            let newHeight = startHeight + dy;
+        const deleteBtn = document.createElement("button");
+        deleteBtn.className = "icon-btn danger";
+        deleteBtn.type = "button";
+        deleteBtn.textContent = "🗑";
+        deleteBtn.addEventListener("click", () => {
+          const removed = phones[index];
+          phones.splice(index, 1);
+          setStatus(`Удалён: ${formatPhone(removed)}`);
+          renderPhones();
+        });
 
-            const minWidth = containerRect.width * 0.2;
-            const minHeight = containerRect.height * 0.1;
-            const maxWidth = containerRect.width * 0.95;
-            const maxHeight = containerRect.height * 0.95;
+        card.appendChild(idx);
+        card.appendChild(number);
+        card.appendChild(editBtn);
+        card.appendChild(deleteBtn);
+        numbersList.appendChild(card);
+      });
+    }
 
-            newWidth = Math.max(minWidth, Math.min(maxWidth, newWidth));
-            newHeight = Math.max(minHeight, Math.min(maxHeight, newHeight));
+    function plural(n, one, few, many) {
+      const mod10 = n % 10;
+      const mod100 = n % 100;
+      if (mod10 === 1 && mod100 !== 11) return one;
+      if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return few;
+      return many;
+    }
 
-            frame.style.width = newWidth + "px";
-            frame.style.height = newHeight + "px";
+    function openSheet(index = null) {
+      editIndex = index;
+      sheetTitle.textContent = index === null ? "Добавить номер" : "Редактировать номер";
+      phoneInput.value = index === null ? "" : formatPhone(phones[index]);
+      editSheet.classList.add("visible");
+      setTimeout(() => {
+        phoneInput.focus();
+        phoneInput.select();
+      }, 50);
+    }
 
-            // Пересчитываем left/top так, чтобы центр остался прежним
-            frame.style.left = centerX - newWidth / 2 + "px";
-            frame.style.top = centerY - newHeight / 2 + "px";
-         }
+    function closeSheet() {
+      editIndex = null;
+      editSheet.classList.remove("visible");
+    }
 
-         function stopResize() {
-            isResizing = false;
-         }
+    phoneInput.addEventListener("input", () => {
+      const d = digitsOnly(phoneInput.value).slice(0, 11);
+      if (d.startsWith("48") && d.length > 2) {
+        phoneInput.value = formatPhone(d.slice(2));
+      } else if (d.length <= 9) {
+        phoneInput.value = formatPhone(d);
+      } else {
+        phoneInput.value = d;
+      }
+    });
 
-         frameHandle.addEventListener("mousedown", startResize);
-         frameHandle.addEventListener("touchstart", startResize, {
-            passive: false,
-         });
+    manualBtn.addEventListener("click", () => openSheet(null));
+    cancelEditBtn.addEventListener("click", closeSheet);
 
-         window.addEventListener("mousemove", onResize);
-         window.addEventListener("touchmove", onResize, { passive: false });
+    saveEditBtn.addEventListener("click", () => {
+      const phone = normalizePhone(phoneInput.value);
+      if (!phone) {
+        setStatus("Нужно ввести ровно 9 цифр");
+        return;
+      }
 
-         window.addEventListener("mouseup", stopResize);
-         window.addEventListener("touchend", stopResize);
+      const duplicateIndex = phones.findIndex((p, i) => p === phone && i !== editIndex);
+      if (duplicateIndex !== -1) {
+        setStatus(`Такой номер уже есть: ${formatPhone(phone)}`);
+        return;
+      }
 
-         // ========= Работа с номерами =========
+      if (editIndex === null) {
+        phones.push(phone);
+        setStatus(`Добавлен вручную: ${formatPhone(phone)}`);
+      } else {
+        phones[editIndex] = phone;
+        setStatus(`Обновлён: ${formatPhone(phone)}`);
+      }
 
-         // Распознанный текст -> польский номер "881 724 870"
-         function extractPhone(text) {
-            text = text.replace(/\s+/g, " ");
-            console.log("OCR raw text:", text);
+      closeSheet();
+      renderPhones();
+    });
 
-            const re = /(?:\+48\s*)?(\d{3})\D?(\d{3})\D?(\d{3})/;
-            const m = text.match(re);
-            if (!m) return null;
-            return `${m[1]} ${m[2]} ${m[3]}`;
-         }
+    clearBtn.addEventListener("click", () => {
+      if (!phones.length) return;
+      phones = [];
+      setStatus("Список очищен");
+      renderPhones();
+    });
 
-         // Нормализация номера, введённого вручную (для редактирования)
-         function normalizeManualPhone(input) {
-            const digits = (input.match(/\d/g) || []).join("");
-            if (digits.length !== 9) return null;
-            return `${digits.slice(0, 3)} ${digits.slice(3, 6)} ${digits.slice(
-               6
-            )}`;
-         }
+    sendBtn.addEventListener("click", () => {
+      if (!phones.length) {
+        setStatus("Нет номеров для отправки");
+        return;
+      }
 
-         function openEditPanel(index) {
-            editingIndex = index;
-            editInput.value = scannedPhones[index] || "";
-            editPanel.classList.add("visible");
-            editInput.focus();
-            editInput.select();
-         }
+      const payload = JSON.stringify(phones); // чистые номера без пробелов
 
-         function closeEditPanel() {
-            editingIndex = null;
-            editPanel.classList.remove("visible");
-         }
+      if (tg?.sendData) {
+        tg.sendData(payload);
+        tg.close();
+      } else {
+        setStatus("Открой через Telegram, чтобы отправить номера в чат");
+        console.log(payload);
+      }
+    });
 
-         function renderPhonesList() {
-            phonesListEl.innerHTML = "";
-            if (!scannedPhones.length) {
-               setStatus("Номера ещё не отсканированы.");
-               return;
-            }
-            setStatus(`Отсканировано номеров: ${scannedPhones.length}`);
+    async function startCamera() {
+      if (stream) {
+        startAutoScan();
+        return;
+      }
 
-            scannedPhones.forEach((p, idx) => {
-               const li = document.createElement("li");
+      setStatus("Запрашиваю доступ к камере...");
+      cameraBtn.disabled = true;
 
-               const textSpan = document.createElement("span");
-               textSpan.className = "li-text";
-               textSpan.textContent = `${idx + 1}. ${p}`;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { ideal: "environment" },
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+          },
+          audio: false
+        });
 
-               const actions = document.createElement("span");
-               actions.className = "li-actions";
+        video.srcObject = stream;
+        await video.play();
 
-               const editBtn = document.createElement("button");
-               editBtn.type = "button";
-               editBtn.className = "small-btn";
-               editBtn.textContent = "✏️";
-               editBtn.addEventListener("click", () => {
-                  openEditPanel(idx);
-               });
+        cameraPlaceholder.classList.add("hidden");
+        scanBand.classList.add("active");
+        setStatus("Камера включена. Авто-сканирование активно");
+        startAutoScan();
+      } catch (err) {
+        console.error(err);
+        setStatus("Нет доступа к камере. Разреши камеру в Telegram/браузере");
+        if (tg?.showAlert) tg.showAlert("Нет доступа к камере. Разреши камеру в Telegram/браузере.");
+      } finally {
+        cameraBtn.disabled = false;
+      }
+    }
 
-               const delBtn = document.createElement("button");
-               delBtn.type = "button";
-               delBtn.className = "small-btn danger";
-               delBtn.textContent = "🗑️";
-               delBtn.addEventListener("click", () => {
-                  const value = scannedPhones[idx];
-                  scannedPhones.splice(idx, 1);
-                  setStatus(`Номер удалён: ${value}`);
-                  renderPhonesList();
-               });
+    function stopAutoScan() {
+      if (scanTimer) clearInterval(scanTimer);
+      scanTimer = null;
+      modePill.textContent = "пауза";
+      cameraBtn.textContent = "▶️";
+      setStatus("Авто-сканирование на паузе");
+    }
 
-               actions.appendChild(editBtn);
-               actions.appendChild(delBtn);
+    function startAutoScan() {
+      if (scanTimer) return;
+      modePill.textContent = "авто";
+      cameraBtn.textContent = "⏸";
+      setStatus("Авто-сканирование активно");
+      scanFrame();
+      scanTimer = setInterval(scanFrame, SCAN_INTERVAL_MS);
+    }
 
-               li.appendChild(textSpan);
-               li.appendChild(actions);
-               phonesListEl.appendChild(li);
-            });
-         }
+    cameraBtn.addEventListener("click", () => {
+      if (!stream) {
+        startCamera();
+        return;
+      }
+      if (scanTimer) stopAutoScan();
+      else startAutoScan();
+    });
 
-         // Сохранение редактированного номера
-         editSaveBtn.addEventListener("click", () => {
-            if (editingIndex === null) {
-               closeEditPanel();
-               return;
-            }
-            const raw = editInput.value || "";
-            const normalized = normalizeManualPhone(raw);
-            if (!normalized) {
-               setStatus("Нужно ввести ровно 9 цифр, например 881724870.");
-               return;
-            }
-            scannedPhones[editingIndex] = normalized;
-            setStatus(`Номер обновлён: ${normalized}`);
-            closeEditPanel();
-            renderPhonesList();
-         });
+    function extractPhonesFromText(text) {
+      const cleanText = String(text || "")
+        .replace(/[|]/g, " ")
+        .replace(/\s+/g, " ");
 
-         editCancelBtn.addEventListener("click", () => {
-            closeEditPanel();
-         });
+      const lines = String(text || "")
+        .split(/\n+/)
+        .map((line) => line.trim())
+        .filter(Boolean);
 
-         // Сканирование
-         scanBtn.addEventListener("click", async () => {
-            if (!video.videoWidth || !video.videoHeight) {
-               setStatus("Камера ещё не готова, попробуй через секунду.");
-               return;
-            }
+      const candidates = [];
 
-            scanBtn.disabled = true;
-            sendBtn.disabled = true;
-            setStatus("Сканирую и распознаю...");
+      function collectFrom(str, scoreBonus = 0) {
+        // Не вытаскиваем 9 цифр изнутри длинного barcode/ICCID.
+        // Подходит: 731399865, 731 399 865, 731-399-865, +48 731 399 865.
+        const re = /(^|[^\d])(?:\+?48[\s\-.]*)?(\d{3})[\s\-.]*(\d{3})[\s\-.]*(\d{3})(?!\d)/g;
+        let match;
+        while ((match = re.exec(str)) !== null) {
+          const phone = `${match[2]}${match[3]}${match[4]}`;
+          if (phone.length === 9) {
+            candidates.push({ phone, score: scoreBonus });
+          }
+        }
+      }
 
-            try {
-               // 1. Кадр целиком
-               const canvas = document.createElement("canvas");
-               canvas.width = video.videoWidth;
-               canvas.height = video.videoHeight;
-               const ctx = canvas.getContext("2d");
-               ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      for (const line of lines) {
+        const lower = line.toLowerCase();
+        const digitCount = digitsOnly(line).length;
+        const hasPhoneLabel = lower.includes("phone") || lower.includes("telefon") || lower.includes("numer");
+        const score = hasPhoneLabel ? 10 : 0;
 
-               // 2. Кроп по рамке
-               const frameRect = frame.getBoundingClientRect();
-               const videoRect = video.getBoundingClientRect();
+        // Если в строке только длинный barcode, пропускаем.
+        if (digitCount > 12 && !hasPhoneLabel) continue;
+        collectFrom(line, score);
+      }
 
-               const relX = (frameRect.left - videoRect.left) / videoRect.width;
-               const relY = (frameRect.top - videoRect.top) / videoRect.height;
-               const relW = frameRect.width / videoRect.width;
-               const relH = frameRect.height / videoRect.height;
+      collectFrom(cleanText, 0);
 
-               const cropCanvas = document.createElement("canvas");
-               cropCanvas.width = canvas.width * relW;
-               cropCanvas.height = canvas.height * relH;
-               const cropCtx = cropCanvas.getContext("2d");
+      const unique = [];
+      const seen = new Set();
+      candidates
+        .sort((a, b) => b.score - a.score)
+        .forEach((item) => {
+          if (!seen.has(item.phone)) {
+            seen.add(item.phone);
+            unique.push(item.phone);
+          }
+        });
 
-               cropCtx.drawImage(
-                  canvas,
-                  canvas.width * relX,
-                  canvas.height * relY,
-                  canvas.width * relW,
-                  canvas.height * relH,
-                  0,
-                  0,
-                  cropCanvas.width,
-                  cropCanvas.height
-               );
+      return unique;
+    }
 
-               // 3. OCR по вырезанной области
-               const result = await Tesseract.recognize(cropCanvas, "eng", {
-                  logger: (m) => console.log(m),
-               });
+    function makeScanCanvas() {
+      if (!video.videoWidth || !video.videoHeight) return null;
 
-               const text = result.data.text || "";
-               const phone = extractPhone(text);
+      const source = document.createElement("canvas");
+      source.width = video.videoWidth;
+      source.height = video.videoHeight;
+      const sctx = source.getContext("2d", { willReadFrequently: true });
+      sctx.drawImage(video, 0, 0, source.width, source.height);
 
-               if (!phone) {
-                  setStatus(
-                     "Не нашёл номер. Поднеси ближе/резче или увеличь рамку."
-                  );
-               } else {
-                  if (!scannedPhones.includes(phone)) {
-                     scannedPhones.push(phone);
-                     setStatus(`Добавлен номер: ${phone}`);
-                  } else {
-                     setStatus(`Номер уже есть в списке: ${phone}`);
-                  }
-                  renderPhonesList();
-               }
-            } catch (e) {
-               console.error(e);
-               setStatus("Ошибка распознавания. Попробуй ещё раз.");
-            } finally {
-               scanBtn.disabled = false;
-               sendBtn.disabled = false;
-            }
-         });
+      // Центральная область, где обычно лежит карточка с номером.
+      // Без видимой инструкции «наводи в рамку», но OCR не читает весь кадр с лишним мусором.
+      const cropX = source.width * 0.04;
+      const cropY = source.height * 0.25;
+      const cropW = source.width * 0.92;
+      const cropH = source.height * 0.45;
 
-         // Отправка
-         sendBtn.addEventListener("click", () => {
-            if (!scannedPhones.length) {
-               setStatus("Нет ни одного номера для отправки.");
-               return;
-            }
-            const payload = JSON.stringify(scannedPhones);
-            tg.sendData(payload);
-            tg.close();
-         });
+      const crop = document.createElement("canvas");
+      crop.width = Math.max(1, Math.floor(cropW));
+      crop.height = Math.max(1, Math.floor(cropH));
+      const cctx = crop.getContext("2d", { willReadFrequently: true });
+      cctx.drawImage(source, cropX, cropY, cropW, cropH, 0, 0, crop.width, crop.height);
 
-         // Первичный рендер
-         renderPhonesList();
-      </script>
-   </body>
+      return crop;
+    }
+
+    async function scanFrame() {
+      if (isRecognizing || !stream || !video.videoWidth) return;
+      const canvas = makeScanCanvas();
+      if (!canvas) return;
+
+      isRecognizing = true;
+      modePill.textContent = "читаю...";
+
+      try {
+        const result = await Tesseract.recognize(canvas, "eng", {
+          logger: () => {}
+        });
+
+        const text = result?.data?.text || "";
+        const found = extractPhonesFromText(text);
+
+        if (found.length) {
+          let added = 0;
+          found.forEach((phone) => {
+            if (addPhone(phone, "scan")) added += 1;
+          });
+          if (!added) setStatus("Найденный номер уже есть в списке");
+        } else if (!phones.length) {
+          setStatus("Сканирую... номера пока нет");
+        } else {
+          setStatus(`Сканирую... найдено ${phones.length}`);
+        }
+      } catch (err) {
+        console.error(err);
+        setStatus("Ошибка OCR. Можно добавить номер вручную");
+      } finally {
+        isRecognizing = false;
+        if (scanTimer) modePill.textContent = "авто";
+      }
+    }
+
+    renderPhones();
+  </script>
+</body>
 </html>
