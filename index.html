@@ -358,7 +358,7 @@
             <div id="empty-screen-inner">
                <div id="empty-screen-title">Сканер номеров</div>
                <div id="empty-screen-text">
-                  Нажми кнопку камеры. Номера будут добавляться автоматически.
+                  Камера откроется автоматически. Номера будут добавляться сами.
                   На экране они будут с пробелами, а в чат уйдут без пробелов.
                </div>
             </div>
@@ -369,7 +369,7 @@
          </div>
       </div>
 
-      <div id="status-chip">Подготавливаю распознавание...</div>
+      <div id="status-chip">Открываю камеру...</div>
 
       <button id="camera-btn" type="button">📷</button>
 
@@ -427,6 +427,7 @@
          let editingIndex = null;
 
          let stream = null;
+         let cameraStarting = false;
          let autoScanEnabled = false;
          let scanTimer = null;
          let scanBusy = false;
@@ -904,11 +905,14 @@
          }
 
          async function startCamera() {
+            if (cameraStarting || stream) return;
+
             if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
                setStatus("Камера недоступна в этом браузере");
                return;
             }
 
+            cameraStarting = true;
             cameraBtn.disabled = true;
             setStatus("Запрашиваю доступ к камере...");
 
@@ -930,9 +934,11 @@
                initFrame(true);
 
                cameraBtn.disabled = false;
+               cameraStarting = false;
                startAutoScan();
             } catch (error) {
                console.error(error);
+               cameraStarting = false;
                cameraBtn.disabled = false;
                setStatus("Не удалось открыть камеру. Разреши доступ в Telegram/браузере.");
 
@@ -976,16 +982,20 @@
          setTimeout(() => {
             ensureWorker()
                .then(() => {
-                  if (!stream && !autoScanEnabled) {
-                     setStatus("OCR готов. Нажми 📷, чтобы включить камеру");
+                  if (!stream && !autoScanEnabled && !cameraStarting) {
+                     setStatus("OCR готов. Открываю камеру...");
                   }
                })
                .catch(() => {
-                  if (!stream && !autoScanEnabled) {
-                     setStatus("OCR загрузится при первом скане. Нажми 📷");
+                  if (!stream && !autoScanEnabled && !cameraStarting) {
+                     setStatus("OCR загрузится при первом скане. Открываю камеру...");
                   }
                });
-         }, 400);
+         }, 200);
+
+         setTimeout(() => {
+            startCamera();
+         }, 350);
       </script>
    </body>
 </html>
