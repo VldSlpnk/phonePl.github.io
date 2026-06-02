@@ -376,7 +376,7 @@
       <div id="controls">
          <div id="controls-header">
             <div id="controls-title">Отсканированные номера</div>
-            <div id="scan-mode-badge">авто</div>
+            <div id="scan-mode-badge">новые сверху</div>
          </div>
 
          <ul id="phones-list"></ul>
@@ -464,23 +464,31 @@
             return `${d.slice(0, 3)} ${d.slice(3, 6)} ${d.slice(6, 9)}`;
          }
 
-         function scrollPhonesListToBottom() {
+         function scrollPhonesListToTop() {
             requestAnimationFrame(() => {
-               const maxScrollTop = phonesListEl.scrollHeight;
-
                if (typeof phonesListEl.scrollTo === "function") {
                   phonesListEl.scrollTo({
-                     top: maxScrollTop,
+                     top: 0,
                      behavior: "smooth",
                   });
                } else {
-                  phonesListEl.scrollTop = maxScrollTop;
+                  phonesListEl.scrollTop = 0;
                }
             });
          }
 
+         function hasPhone(digits, ignoreIndex = null) {
+            const normalized = toNineDigits(digits);
+            if (!normalized) return false;
+
+            return scannedPhones.some((phone, index) => {
+               if (ignoreIndex !== null && index === ignoreIndex) return false;
+               return toNineDigits(phone) === normalized;
+            });
+         }
+
          function renderPhonesList(options = {}) {
-            const shouldScrollToLast = Boolean(options.scrollToLast);
+            const shouldScrollToLatest = Boolean(options.scrollToLatest);
 
             phonesListEl.innerHTML = "";
             sendBtn.disabled = scannedPhones.length === 0;
@@ -527,22 +535,27 @@
                phonesListEl.appendChild(li);
             });
 
-            if (shouldScrollToLast) {
-               scrollPhonesListToBottom();
+            if (shouldScrollToLatest) {
+               scrollPhonesListToTop();
             }
          }
 
-         function addPhone(phoneDigits) {
+         function addPhone(phoneDigits, options = {}) {
             const digits = toNineDigits(phoneDigits);
             if (!digits) return false;
 
-            if (scannedPhones.includes(digits)) {
-               setStatus(`Уже есть: ${formatPhone(digits)}`);
+            const silentDuplicate = Boolean(options.silentDuplicate);
+
+            if (hasPhone(digits)) {
+               if (!silentDuplicate) {
+                  setStatus(`Уже есть: ${formatPhone(digits)}`);
+               }
                return false;
             }
 
-            scannedPhones.push(digits);
-            renderPhonesList({ scrollToLast: true });
+            // Новые номера добавляем в начало списка, чтобы они всегда были видны сверху.
+            scannedPhones.unshift(digits);
+            renderPhonesList({ scrollToLatest: true });
 
             if (navigator.vibrate) {
                navigator.vibrate(60);
@@ -591,17 +604,14 @@
             }
 
             if (editingIndex === -1) {
-               addPhone(digits);
-               closeEditPanel();
+               if (addPhone(digits)) {
+                  closeEditPanel();
+               }
                return;
             }
 
             if (editingIndex !== null) {
-               const duplicateIndex = scannedPhones.findIndex((p, idx) => {
-                  return p === digits && idx !== editingIndex;
-               });
-
-               if (duplicateIndex !== -1) {
+               if (hasPhone(digits, editingIndex)) {
                   setStatus(`Такой номер уже есть: ${formatPhone(digits)}`);
                   return;
                }
@@ -881,7 +891,7 @@
                let added = 0;
 
                phones.forEach((phone) => {
-                  if (addPhone(phone)) {
+                  if (addPhone(phone, { silentDuplicate: true })) {
                      added += 1;
                   }
                });
@@ -902,7 +912,7 @@
 
             autoScanEnabled = true;
             cameraBtn.textContent = "⏸️";
-            scanModeBadge.textContent = "авто";
+            scanModeBadge.textContent = "новые сверху";
             setStatus("Сканирую... номера пока нет");
 
             if (scanTimer) {
