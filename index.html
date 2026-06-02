@@ -424,6 +424,7 @@
          const editCancelBtn = document.getElementById("edit-cancel-btn");
 
          let scannedPhones = [];
+         let nextPhoneSeq = 1;
          let editingIndex = null;
 
          let stream = null;
@@ -466,24 +467,23 @@
 
          function scrollPhonesListToTop() {
             requestAnimationFrame(() => {
-               if (typeof phonesListEl.scrollTo === "function") {
-                  phonesListEl.scrollTo({
-                     top: 0,
-                     behavior: "smooth",
-                  });
-               } else {
-                  phonesListEl.scrollTop = 0;
-               }
+               phonesListEl.scrollTop = 0;
             });
+         }
+
+         function getPhoneDigits(item) {
+            if (typeof item === "string") return toNineDigits(item);
+            if (item && typeof item === "object") return toNineDigits(item.digits);
+            return null;
          }
 
          function hasPhone(digits, ignoreIndex = null) {
             const normalized = toNineDigits(digits);
             if (!normalized) return false;
 
-            return scannedPhones.some((phone, index) => {
+            return scannedPhones.some((item, index) => {
                if (ignoreIndex !== null && index === ignoreIndex) return false;
-               return toNineDigits(phone) === normalized;
+               return getPhoneDigits(item) === normalized;
             });
          }
 
@@ -501,12 +501,14 @@
                return;
             }
 
-            scannedPhones.forEach((phone, index) => {
+            scannedPhones.forEach((phoneItem, index) => {
                const li = document.createElement("li");
+               const digits = getPhoneDigits(phoneItem);
+               const seq = phoneItem && typeof phoneItem === "object" && phoneItem.seq ? phoneItem.seq : scannedPhones.length - index;
 
                const text = document.createElement("span");
                text.className = "li-text";
-               text.textContent = `${index + 1}. ${formatPhone(phone)}`;
+               text.textContent = `${seq}. ${formatPhone(digits)}`;
 
                const actions = document.createElement("span");
                actions.className = "li-actions";
@@ -522,7 +524,7 @@
                deleteBtn.className = "small-btn danger";
                deleteBtn.textContent = "🗑️";
                deleteBtn.addEventListener("click", () => {
-                  const deleted = scannedPhones[index];
+                  const deleted = getPhoneDigits(scannedPhones[index]);
                   scannedPhones.splice(index, 1);
                   setStatus(`Удалён: ${formatPhone(deleted)}`);
                   renderPhonesList();
@@ -554,7 +556,12 @@
             }
 
             // Новые номера добавляем в начало списка, чтобы они всегда были видны сверху.
-            scannedPhones.unshift(digits);
+            // seq — это стабильный номер сканирования: старые элементы не перенумеровываются при добавлении новых.
+            scannedPhones.unshift({
+               digits,
+               seq: nextPhoneSeq,
+            });
+            nextPhoneSeq += 1;
             renderPhonesList({ scrollToLatest: true });
 
             if (navigator.vibrate) {
@@ -571,7 +578,7 @@
             if (index === -1) {
                editInput.value = "";
             } else {
-               editInput.value = formatPhone(scannedPhones[index]);
+               editInput.value = formatPhone(getPhoneDigits(scannedPhones[index]));
             }
 
             editPanel.classList.add("visible");
@@ -616,7 +623,7 @@
                   return;
                }
 
-               scannedPhones[editingIndex] = digits;
+               scannedPhones[editingIndex].digits = digits;
                setStatus(`Обновлён: ${formatPhone(digits)}`);
                renderPhonesList();
                closeEditPanel();
@@ -999,13 +1006,13 @@
                return;
             }
 
-            const payload = JSON.stringify(scannedPhones);
+            const payload = JSON.stringify(scannedPhones.map((item) => getPhoneDigits(item)));
 
             if (tg && tg.sendData) {
                tg.sendData(payload);
                tg.close();
             } else {
-               alert(scannedPhones.join("\n"));
+               alert(scannedPhones.map((item) => getPhoneDigits(item)).join("\n"));
             }
          });
 
