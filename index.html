@@ -119,26 +119,6 @@
             line-height: 1.25;
          }
 
-         #camera-btn {
-            position: fixed;
-            right: 18px;
-            bottom: calc(205px + env(safe-area-inset-bottom));
-            z-index: 45;
-            width: 74px;
-            height: 74px;
-            border-radius: 24px;
-            border: none;
-            background: linear-gradient(180deg, #40c4ff, #1296f3);
-            color: #fff;
-            font-size: 30px;
-            font-weight: 800;
-            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
-         }
-
-         #camera-btn:disabled {
-            opacity: 0.65;
-         }
-
          #controls {
             position: fixed;
             left: 12px;
@@ -335,13 +315,6 @@
                max-height: 16vh;
             }
 
-            #camera-btn {
-               width: 62px;
-               height: 62px;
-               border-radius: 20px;
-               font-size: 25px;
-               bottom: calc(185px + env(safe-area-inset-bottom));
-            }
 
             #controls-title {
                font-size: 18px;
@@ -371,12 +344,11 @@
 
       <div id="status-chip">Открываю камеру...</div>
 
-      <button id="camera-btn" type="button">📷</button>
 
       <div id="controls">
          <div id="controls-header">
             <div id="controls-title">Отсканированные номера</div>
-            <div id="scan-mode-badge">новые сверху</div>
+            <div id="scan-mode-badge">авто</div>
          </div>
 
          <ul id="phones-list"></ul>
@@ -411,7 +383,6 @@
          const frameHandle = document.getElementById("frame-resize-handle");
 
          const statusChip = document.getElementById("status-chip");
-         const cameraBtn = document.getElementById("camera-btn");
          const scanModeBadge = document.getElementById("scan-mode-badge");
 
          const phonesListEl = document.getElementById("phones-list");
@@ -918,7 +889,6 @@
             if (!stream) return;
 
             autoScanEnabled = true;
-            cameraBtn.textContent = "⏸️";
             scanModeBadge.textContent = "новые сверху";
             setStatus("Сканирую... номера пока нет");
 
@@ -930,19 +900,6 @@
             scanTimer = setInterval(runOCROnce, 1300);
          }
 
-         function pauseAutoScan() {
-            autoScanEnabled = false;
-            cameraBtn.textContent = "▶️";
-            scanModeBadge.textContent = "пауза";
-
-            if (scanTimer) {
-               clearInterval(scanTimer);
-               scanTimer = null;
-            }
-
-            setStatus("Сканирование на паузе");
-         }
-
          async function startCamera() {
             if (cameraStarting || stream) return;
 
@@ -952,7 +909,6 @@
             }
 
             cameraStarting = true;
-            cameraBtn.disabled = true;
             setStatus("Запрашиваю доступ к камере...");
 
             try {
@@ -972,33 +928,18 @@
                frame.classList.remove("hidden");
                initFrame(true);
 
-               cameraBtn.disabled = false;
                cameraStarting = false;
                startAutoScan();
             } catch (error) {
                console.error(error);
                cameraStarting = false;
-               cameraBtn.disabled = false;
-               setStatus("Не удалось открыть камеру. Разреши доступ в Telegram/браузере.");
+               setStatus("Не удалось открыть камеру. Разреши доступ и перезайди в WebApp.");
 
                if (tg && tg.showAlert) {
                   tg.showAlert("Не удалось открыть камеру. Проверь разрешение камеры.");
                }
             }
          }
-
-         cameraBtn.addEventListener("click", async () => {
-            if (!stream) {
-               await startCamera();
-               return;
-            }
-
-            if (autoScanEnabled) {
-               pauseAutoScan();
-            } else {
-               startAutoScan();
-            }
-         });
 
          sendBtn.addEventListener("click", () => {
             if (!scannedPhones.length) {
