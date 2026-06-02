@@ -464,7 +464,24 @@
             return `${d.slice(0, 3)} ${d.slice(3, 6)} ${d.slice(6, 9)}`;
          }
 
-         function renderPhonesList() {
+         function scrollPhonesListToBottom() {
+            requestAnimationFrame(() => {
+               const maxScrollTop = phonesListEl.scrollHeight;
+
+               if (typeof phonesListEl.scrollTo === "function") {
+                  phonesListEl.scrollTo({
+                     top: maxScrollTop,
+                     behavior: "smooth",
+                  });
+               } else {
+                  phonesListEl.scrollTop = maxScrollTop;
+               }
+            });
+         }
+
+         function renderPhonesList(options = {}) {
+            const shouldScrollToLast = Boolean(options.scrollToLast);
+
             phonesListEl.innerHTML = "";
             sendBtn.disabled = scannedPhones.length === 0;
 
@@ -509,6 +526,10 @@
                li.appendChild(actions);
                phonesListEl.appendChild(li);
             });
+
+            if (shouldScrollToLast) {
+               scrollPhonesListToBottom();
+            }
          }
 
          function addPhone(phoneDigits) {
@@ -521,7 +542,7 @@
             }
 
             scannedPhones.push(digits);
-            renderPhonesList();
+            renderPhonesList({ scrollToLast: true });
 
             if (navigator.vibrate) {
                navigator.vibrate(60);
