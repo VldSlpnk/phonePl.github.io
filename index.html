@@ -607,7 +607,8 @@
             frame.style.width = `${width}px`;
             frame.style.height = `${height}px`;
             frame.style.left = `${(rect.width - width) / 2}px`;
-            frame.style.top = `${(rect.height - height) / 2}px`;
+            const centerY = rect.height * 0.30;
+            frame.style.top = `${centerY - height / 2}px`;
 
             frameInitialized = true;
          }
